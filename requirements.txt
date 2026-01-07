@@ -1,0 +1,7 @@
+coqui-TTS
+SpeechRecognition
+ollama
+sounddevice
+PyAudio
+vosk
+numpy
