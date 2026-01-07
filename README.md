@@ -15,3 +15,7 @@ Entra as expansões futuras:
 - Dar função de abrir aplicativos
 - Dar função de capturar tela e responder questões referentes à captura
 
+# Referente aos requisitos para operação
+- Python 3.10
+- Estar com o Ollama instalado e com o modelo indicado rodando;
+- Criar uma pasta models e inserir nessa pasta os modelos de voz do vosk em pt
