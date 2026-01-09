@@ -12,6 +12,7 @@ import sys
 import signal
 import json
 import os
+import speech_recognition as sr  # Adicione esta linha se não existir
 
 class MiraiAssistant:
     def __init__(self, config_file="mirai_config.json"):
@@ -45,9 +46,11 @@ class MiraiAssistant:
         """Carrega configuração do arquivo"""
         default_config = {
             "audio_device": None,
+            "mic_device": None,
             "volume": 1.0,
             "speed": 1.1,
             "model": "mistral",
+            "temperature": 1.1,
             "wake_words": ["mirai", "mirá", "miray"],
             "auto_listen": False
         }
@@ -77,7 +80,7 @@ class MiraiAssistant:
     
     def apply_config(self):
         """Aplica configurações carregadas"""
-        # Configura áudio
+        # Configura áudio de saída (fone)
         if self.config.get("audio_device") is not None:
             self.tts.select_audio_device(self.config["audio_device"])
         
@@ -85,7 +88,12 @@ class MiraiAssistant:
             volume=self.config.get("volume", 1.0),
             rate=self.config.get("speed", 1.1)
         )
+        
+        # Aplica temperatura no modelo AI
+        self.ai.config["temperature"] = self.config.get("temperature", 1.1)
     
+    
+
     def signal_handler(self, sig, frame):
         """Lida com Ctrl+C"""
         print("\n\n🛑 Interrupção recebida...")
@@ -101,7 +109,7 @@ class MiraiAssistant:
         print(f"🤖 Mirai: {greeting_text}")
         self.tts.speak(greeting_text)
     
-    def process_command(self, command):
+    def process_command(self, command, text_only=False):
         """Processa um comando do usuário"""
         if not command:
             return
@@ -113,19 +121,23 @@ class MiraiAssistant:
         response = self.ai.responder(command)
         
         if response:
-            # Fala a resposta
+            # Mostra a resposta
             print(f"🤖 Mirai: {response}")
-            print("🎤 Falando...")
-            self.tts.speak(response)
+            
+            # Se não for modo texto apenas, fala a resposta
+            if not text_only:
+                print("🎤 Falando...")
+                self.tts.speak(response)
         else:
             error_msg = "Desculpe, não consegui processar isso."
             print(f"⚠️  {error_msg}")
-            self.tts.speak(error_msg)
+            if not text_only:
+                self.tts.speak(error_msg)
     
     def audio_setup_wizard(self):
-        """Assistente de configuração de áudio"""
+        """Assistente de configuração de áudio de saída"""
         print("\n" + "="*50)
-        print("🎧 ASSISTENTE DE SAÍDA DE SOM")
+        print("🎧 CONFIGURAÇÃO DE SAÍDA DE SOM")
         print("="*50)
         print("Vamos configurar onde a Mirai vai falar...")
         
@@ -156,87 +168,76 @@ class MiraiAssistant:
                         print("✅ Dispositivo selecionado e salvo!")
                         return
         else:
-            print("Dispositivo padrão funcionando, não precisa configurar")
+            print("✅ Dispositivo padrão funcionando")
     
-    def settings_menu(self):
-        """Menu de configurações"""
-        while True:
-            print("\n" + "="*50)
-            print("⚙️  CONFIGURAÇÕES DA MIRAI")
-            print("="*50)
-            print("1. Configurar dispositivo de áudio")
-            print("2. Ajustar volume e velocidade")
-            print("3. Testar síntese de voz")
-            print("4. Listar dispositivos de áudio")
-            print("5. Configurar palavras de ativação")
-            print("6. Salvar configuração")
-            print("7. Voltar ao menu principal")
-            print("="*50)
-            
-            choice = input("\nEscolha uma opção: ").strip()
-            
-            if choice == "1":
-                self.tts.select_audio_device()
-                # Salva seleção
-                self.config["audio_device"] = self.tts.selected_device
-                self.save_config()
-            
-            elif choice == "2":
-                try:
-                    vol = float(input("Volume (0.0-2.0): ") or "1.0")
-                    speed = float(input("Velocidade (0.5-2.0): ") or "1.1")
-                    self.tts.set_voice_settings(vol, speed)
-                    self.config["volume"] = vol
-                    self.config["speed"] = speed
-                    self.save_config()
-                except:
-                    print("❌ Valores inválidos")
-            
-            elif choice == "3":
-                text = input("Texto para teste: ").strip()
-                if not text:
-                    text = "Olá, eu sou a Mirai. Este é um teste de áudio."
-                self.tts.speak(text)
-            
-            elif choice == "4":
-                self.tts.show_audio_devices_menu()
-                input("\nPressione Enter para continuar...")
-            
-            elif choice == "5":
-                self.configure_wake_words()
-            
-            elif choice == "6":
-                self.save_config()
-                print("✅ Configuração salva!")
-            
-            elif choice == "7":
-                break
-            
-            else:
-                print("❌ Opção inválida")
-    
-    def configure_wake_words(self):
-        """Configura palavras de ativação personalizadas"""
-        print("\n🔧 Configurar palavras de ativação")
-        print("Palavras atuais:", self.config.get("wake_words", ["mirai"]))
+    def text_only_mode(self):
+        """Modo somente texto - sem áudio"""
+        print("\n" + "="*50)
+        print("📝 MODO SOMENTE TEXTO")
+        print("="*50)
+        print("ℹ️  Digite seus comandos e receba respostas em texto.")
+        print("💡 Digite 'sair' para voltar ao menu principal")
+        print("="*50)
         
-        new_words = input("Novas palavras (separadas por vírgula): ").strip()
-        if new_words:
-            words = [w.strip().lower() for w in new_words.split(",")]
-            self.config["wake_words"] = words
-            print(f"✅ Palavras atualizadas: {words}")
+        while True:
+            try:
+                user_input = input("\n👤 Você: ").strip()
+                
+                if user_input.lower() in ['sair', 'exit', 'quit', 'voltar']:
+                    print("↩️  Voltando ao menu principal...")
+                    break
+                
+                if not user_input:
+                    continue
+                
+                # Processa o comando em modo texto
+                self.process_command(user_input, text_only=True)
+                
+            except KeyboardInterrupt:
+                print("\n↩️  Voltando ao menu principal...")
+                break
+            except Exception as e:
+                print(f"❌ Erro: {e}")
     
-    def listen_loop(self):
-        """Loop principal de escuta"""
-        print("\n🎧 Modo de escuta ativado")
-        print("🎯 Diga 'Mirai' seguido do seu comando")
+    def listen_continuous_mode(self):
+        """Modo de conversação contínua sem wake word"""
+        print("\n🎧 Modo de conversação contínua")
+        print("⚠️  Não precisa dizer 'Mirai' antes dos comandos")
+        print("⏰ Timeout de 10 segundos entre comandos")
+        print("⏸️  Pressione Ctrl+C para voltar ao menu\n")
+        
+        while self.active:
+            try:
+                # Escuta um único comando
+                command = self.listener.listen_single_command(
+                    device_index=self.config.get("mic_device")
+                )
+                
+                if command and self.active:
+                    # Processa o comando
+                    self.process_command(command)
+                    
+                    # Pequena pausa para evitar detecção do próprio áudio
+                    time.sleep(0.5)
+                    
+            except KeyboardInterrupt:
+                print("\n🛑 Retornando ao menu...")
+                break
+            except Exception as e:
+                print(f"⚠️  Erro: {e}")
+                time.sleep(2)
+    
+    def listen_wake_word_mode(self):
+        """Modo com wake word"""
+        print("\n🎧 Modo de escuta com wake word")
+        print(f"🎯 Palavras de ativação: {self.config.get('wake_words', ['mirai'])}")
         print("⏸️  Pressione Ctrl+C para voltar ao menu\n")
         
         while self.active:
             try:
                 # Aguarda wake word
                 command = self.listener.listen_for_wake_word(
-                    device_index=None,
+                    device_index=self.config.get("mic_device"),
                     timeout=30
                 )
                 
@@ -254,17 +255,226 @@ class MiraiAssistant:
                 print(f"⚠️  Erro: {e}")
                 time.sleep(2)
     
+    def audio_output_settings(self):
+        """Configurações de saída de áudio (fone)"""
+        while True:
+            print("\n" + "="*50)
+            print("🎧 CONFIGURAÇÕES DE FONE/ALTO-FALANTE")
+            print("="*50)
+            print("1. Testar dispositivo de áudio")
+            print("2. Selecionar dispositivo de áudio")
+            print("3. Ajustar volume e velocidade")
+            print("4. Listar dispositivos disponíveis")
+            print("5. Voltar")
+            print("="*50)
+            
+            choice = input("\nEscolha uma opção: ").strip()
+            
+            if choice == "1":
+                self.tts.test_audio_device()
+                input("\nPressione Enter para continuar...")
+            
+            elif choice == "2":
+                if self.tts.select_audio_device():
+                    self.config["audio_device"] = self.tts.selected_device
+                    self.save_config()
+            
+            elif choice == "3":
+                try:
+                    vol = float(input("Volume (0.0-2.0, padrão=1.0): ") or "1.0")
+                    speed = float(input("Velocidade (0.5-2.0, padrão=1.1): ") or "1.1")
+                    self.tts.set_voice_settings(vol, speed)
+                    self.config["volume"] = vol
+                    self.config["speed"] = speed
+                    self.save_config()
+                except:
+                    print("❌ Valores inválidos")
+            
+            elif choice == "4":
+                self.tts.show_audio_devices_menu()
+                input("\nPressione Enter para continuar...")
+            
+            elif choice == "5":
+                break
+            
+            else:
+                print("❌ Opção inválida")
+    
+    def mic_settings(self):
+        """Configurações de microfone"""
+        while True:
+            print("\n" + "="*50)
+            print("🎤 CONFIGURAÇÕES DE MICROFONE")
+            print("="*50)
+            print("1. Testar microfone")
+            print("2. Selecionar microfone")
+            print("3. Listar microfones disponíveis")
+            print("4. Voltar")
+            print("="*50)
+            
+            choice = input("\nEscolha uma opção: ").strip()
+            
+            if choice == "1":
+                self.test_microphone()
+            
+            elif choice == "2":
+                self.select_microphone()
+            
+            elif choice == "3":
+                self.listener.list_audio_devices()
+                input("\nPressione Enter para continuar...")
+            
+            elif choice == "4":
+                break
+            
+            else:
+                print("❌ Opção inválida")
+    
+    def test_microphone(self):
+        """Testa o microfone atual"""
+        print("\n🎤 Teste de microfone")
+        print("Fale algo por 3 segundos...")
+        
+        try:
+            with sr.Microphone(device_index=self.config.get("mic_device")) as source:
+                self.listener.adjust_for_noise(source, duration=1)
+                
+                print("🎤 Gravando...")
+                audio = self.listener.recognizer.listen(
+                    source, 
+                    timeout=3,
+                    phrase_time_limit=3
+                )
+                
+                print("✅ Áudio capturado! Teste concluído.")
+                print(f"🔊 Nível de energia: {self.listener.recognizer.energy_threshold:.1f}")
+                
+        except Exception as e:
+            print(f"❌ Erro ao testar microfone: {e}")
+    
+    def select_microphone(self):
+        """Seleciona o microfone"""
+        print("\n🎤 Seleção de microfone")
+        
+        try:
+            mics = sr.Microphone.list_microphone_names()
+            
+            if not mics:
+                print("❌ Nenhum microfone encontrado!")
+                return
+            
+            print("\n📋 Microfones disponíveis:")
+            for i, name in enumerate(mics):
+                default_mark = " (PADRÃO)" if i == 0 else ""
+                print(f"[{i}] {name}{default_mark}")
+            
+            try:
+                choice = input("\nSelecione o número do microfone (Enter para padrão): ").strip()
+                
+                if choice == "":
+                    self.config["mic_device"] = None
+                    print("✅ Usando microfone padrão")
+                elif choice.isdigit() and 0 <= int(choice) < len(mics):
+                    self.config["mic_device"] = int(choice)
+                    print(f"✅ Microfone selecionado: {mics[int(choice)]}")
+                else:
+                    print("❌ Opção inválida")
+                    return
+                
+                self.save_config()
+                
+            except ValueError:
+                print("❌ Número inválido")
+                
+        except Exception as e:
+            print(f"❌ Erro ao listar microfones: {e}")
+    
+    def personality_settings(self):
+        """Configurações de personalidade da IA"""
+        while True:
+            print("\n" + "="*50)
+            print("🧠 CONFIGURAÇÕES DE PERSONALIDADE")
+            print("="*50)
+            print(f"Temperatura atual: {self.config.get('temperature', 1.1)}")
+            print("ℹ️  Temperatura controla a criatividade:")
+            print("   - 0.0: Mais determinística, previsível")
+            print("   - 1.0: Equilibrado")
+            print("   - 2.0: Mais criativa, aleatória")
+            print("="*50)
+            print("1. Ajustar temperatura")
+            print("2. Ver dicas de uso")
+            print("3. Voltar")
+            print("="*50)
+            
+            choice = input("\nEscolha uma opção: ").strip()
+            
+            if choice == "1":
+                try:
+                    temp = float(input("Nova temperatura (0.0-2.0): ") or "1.1")
+                    temp = max(0.0, min(2.0, temp))  # Limita entre 0 e 2
+                    self.config["temperature"] = temp
+                    self.save_config()
+                    print(f"✅ Temperatura ajustada para: {temp}")
+                    
+                    # Atualiza no modelo AI
+                    self.ai.config["temperature"] = temp
+                    
+                except ValueError:
+                    print("❌ Valor inválido. Use números como 0.5, 1.0, 1.5")
+            
+            elif choice == "2":
+                print("\n💡 Dicas de uso da temperatura:")
+                print("• 0.2-0.5: Para tarefas factuais, respostas diretas")
+                print("• 0.7-1.0: Conversação normal, equilíbrio criativo")
+                print("• 1.2-1.5: Respostas mais criativas e variadas")
+                print("• 1.7-2.0: Máxima criatividade, pode ser imprevisível")
+                input("\nPressione Enter para continuar...")
+            
+            elif choice == "3":
+                break
+            
+            else:
+                print("❌ Opção inválida")
+    
+    def settings_menu(self):
+        """Menu de configurações principal"""
+        while True:
+            print("\n" + "="*50)
+            print("⚙️  CONFIGURAÇÕES DA MIRAI")
+            print("="*50)
+            print("1. Configurações de Fone/Alto-falante")
+            print("2. Configurações de Microfone")
+            print("3. Configurações de Personalidade")
+            print("4. Voltar ao menu principal")
+            print("="*50)
+            
+            choice = input("\nEscolha uma opção: ").strip()
+            
+            if choice == "1":
+                self.audio_output_settings()
+            
+            elif choice == "2":
+                self.mic_settings()
+            
+            elif choice == "3":
+                self.personality_settings()
+            
+            elif choice == "4":
+                break
+            
+            else:
+                print("❌ Opção inválida")
+    
     def main_menu(self):
         """Menu principal interativo"""
         print("\n" + "="*50)
         print("🤖 M.I.R.A.I - MENU PRINCIPAL")
         print("="*50)
-        print("1. Iniciar modo de escuta (com wake word)")
-        print("2. Configurações")
-        print("3. Configurações de saída de som")
-        print("4. Teste rápido de áudio")
-        print("5. Conversação direta (sem wake word)")
-        print("6. Sair")
+        print("1. Iniciar com Wake Word")
+        print("2. Iniciar sem Wake Word (conversa contínua)")
+        print("3. Iniciar somente texto")
+        print("4. Configurações")
+        print("5. Sair")
         print("="*50)
     
     def run(self):
@@ -272,8 +482,8 @@ class MiraiAssistant:
         # Verificação inicial de áudio
         print("🔊 Verificando sistema de áudio...")
         if not self.tts.audio_devices:
-            print("❌ Nenhum dispositivo de áudio encontrado!")
-            print("💡 Verifique se seus alto-falantes/fones estão conectados.")
+            print("⚠️  Nenhum dispositivo de áudio encontrado!")
+            print("💡 A funcionalidade de voz pode não funcionar corretamente.")
         
         # Menu principal
         while self.active:
@@ -283,30 +493,18 @@ class MiraiAssistant:
                 choice = input("\nEscolha uma opção: ").strip()
                 
                 if choice == "1":
-                    self.listen_loop()
+                    self.listen_wake_word_mode()
                 
                 elif choice == "2":
-                    self.settings_menu()
+                    self.listen_continuous_mode()
                 
                 elif choice == "3":
-                    self.audio_setup_wizard()
+                    self.text_only_mode()
                 
                 elif choice == "4":
-                    self.tts.test_audio_device()
-                    input("\nPressione Enter para continuar...")
+                    self.settings_menu()
                 
                 elif choice == "5":
-                    print("\n💬 Modo conversação direta")
-                    print("⚠️  Não precisa dizer 'Mirai' antes")
-                    print("⏰ Timeout de 10 segundos\n")
-                    
-                    command = self.listener.listen_single_command()
-                    if command:
-                        self.process_command(command)
-                    else:
-                        print("⏰ Nenhum comando recebido")
-                
-                elif choice == "6":
                     print("👋 Até logo!")
                     self.active = False
                 
@@ -329,7 +527,7 @@ def main():
     assistant = MiraiAssistant()
     
     # Saudação inicial
-    print("\n🎯 Dica: Todos os cogumelos são comestíveis, alguns apenas uma vez")
+    print("\n🎯 Dica: Vamos construir um futuro incrível juntos!")
     
     # Executa
     assistant.run()

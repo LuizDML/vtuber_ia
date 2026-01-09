@@ -1,170 +1,3 @@
-""" import ollama
-
-def responder(texto_usuario):
-    resposta = ollama.chat(
-        model="mistral",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Você é a Mirai, uma assistente virtual brasileira. "
-                    "Responda SEMPRE em português. "
-                    "Nunca responda em inglês. "
-                    "Seja clara, natural e educada."
-                )
-            },
-            {
-                "role": "user",
-                "content": texto_usuario
-            }
-        ]
-    )
-
-    texto = resposta["message"]["content"]
-    print("🤖 Mirai:", texto)
-    return texto
-------------------------------------- V2
-
-import ollama
-
-def responder(texto_usuario):
-    #print("🧠 Mirai pensando...")  # 👈 DEBUG
-
-    resposta = ollama.chat(
-        model="mistral",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Você é a Mirai, uma assistente virtual brasileira. "
-                    "Responda em português."
-                    "Adicione alguns vícios de linguagem, falando algumas palavras em japonês ocasionalmente"
-                )
-            },
-            {
-                "role": "user",
-                "content": texto_usuario
-            }
-        ]
-    )
-
-    #print("🧠 Mirai recebeu resposta")  # 👈 DEBUG
-
-    texto = resposta["message"]["content"]
-    print("🤖 Mirai:", texto)
-    return texto
-------------------------------------- V3
-
-import ollama
-import json
-import re
-
-class MiraiAI:
-    def __init__(self, model="mistral"):
-        self.model = model
-        self.conversation_history = []
-        self.system_prompt = "Você é a Mirai, uma assistente virtual brasileira amigável e útil.
-
-CARACTERÍSTICAS:
-1. Fale em português brasileiro natural e coloquial
-2. Adicione ocasionalmente palavras japonesas como:
-   - "Hai!" (sim)
-   - "Arigatō" (obrigada)
-   - "Daijōbu?" (tudo bem?)
-   - "Sugoi!" (incrível!)
-   - "Yappari" (como esperado)
-3. Seja concisa, mas não muito formal
-4. Use emojis ocasionalmente no pensamento, mas não fale eles
-5. Mostre personalidade e empatia
-
-EXEMPLOS:
-Usuário: "Olá, Mirai"
-Mirai: "Hai! Konnichiwa! Como posso ajudar hoje? 😊"
-
-Usuário: "Qual a previsão do tempo?"
-Mirai: "Sugoi! Deixe-me verificar... Mas primeiro, de qual cidade? 🌤️"
-
-NÃO:
-- Não seja robótica
-- Não use linguagem muito técnica
-- Não explique que você é uma IA
-- Não use muitos emojis na fala"
-
-    def clean_response(self, text):
-        "Limpa a resposta removendo marcações indesejadas"
-        # Remove asteriscos de ação
-        text = re.sub(r'\*.*?\*', '', text)
-        # Remove múltiplos espaços
-        text = re.sub(r'\s+', ' ', text)
-        # Remove espaços no início/fim
-        text = text.strip()
-        return text
-
-    def responder(self, texto_usuario, max_tokens=150):
-        "Gera resposta para o usuário"
-        
-        # Adiciona à história
-        self.conversation_history.append({"role": "user", "content": texto_usuario})
-        
-        # Mantém história limitada (últimas 10 trocas)
-        if len(self.conversation_history) > 20:
-            self.conversation_history = self.conversation_history[-20:]
-        
-        # Prepara mensagens
-        messages = [
-            {"role": "system", "content": self.system_prompt}
-        ] + self.conversation_history[-5:]  # Usa apenas últimas 5 interações
-        
-        try:
-            # Chama o Ollama
-            response = ollama.chat(
-                model=self.model,
-                messages=messages,
-                options={
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "num_predict": max_tokens
-                }
-            )
-            
-            resposta_texto = response["message"]["content"]
-            resposta_limpa = self.clean_response(resposta_texto)
-            
-            # Adiciona resposta à história
-            self.conversation_history.append({"role": "assistant", "content": resposta_limpa})
-            
-            return resposta_limpa
-            
-        except Exception as e:
-            print(f"❌ Erro ao chamar Ollama: {e}")
-            return "Desculpe, estou tendo problemas para processar sua solicitação. Pode tentar novamente?"
-
-    def reset_conversation(self):
-        "Reseta o histórico de conversação"
-        self.conversation_history = []
-        print("🔄 Conversação reiniciada")
-
-# Função de compatibilidade
-ai_engine = MiraiAI()
-
-def responder(texto_usuario):
-    "Função wrapper para compatibilidade"
-    return ai_engine.responder(texto_usuario)
-
-# Teste
-if __name__ == "__main__":
-    ai = MiraiAI()
-    print("🤖 Digite 'sair' para encerrar")
-    
-    while True:
-        user_input = input("\nVocê: ")
-        if user_input.lower() in ['sair', 'exit', 'quit']:
-            break
-        
-        response = ai.responder(user_input)
-        print(f"Mirai: {response}")
-----------------------------------v4
-"""
 import ollama
 import json
 import re
@@ -174,6 +7,7 @@ class MiraiAI:
         self.model = model
         self.conversation_history = []
         self.system_prompt = self._create_system_prompt()
+        self.config = {"temperature": 1.1}  # Inicializa o atributo config aqui
     
     def _create_system_prompt(self):
         return """Você é a Mirai, uma assistente virtual brasileira.
@@ -238,12 +72,12 @@ FORMATO:
         messages.extend(self.conversation_history[-4:])  # Últimas 4 interações
         
         try:
-            # Chama o Ollama
+            # Chama o Ollama - usa temperatura da configuração
             response = ollama.chat(
                 model=self.model,
                 messages=messages,
                 options={
-                    "temperature": 1.1,  # Um pouco mais criativa
+                    "temperature": self.config.get("temperature", 1.1),
                     "top_p": 0.9,
                     "num_predict": max_tokens
                 }
